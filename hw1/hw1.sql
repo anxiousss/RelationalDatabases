@@ -34,16 +34,12 @@ create table if not exists pairs (
 );
 
 create table if not exists progress (
-    user_id INTEGER not null,
     pair_id INTEGER not null,
     knowledge_level INTEGER,          
     repetitions INTEGER,
     correct_in_a_row INTEGER,
     last_repetition timestamp,
     next_repetition timestamp,
-    foreign key (user_id) references users(id)
-        on delete cascade
-        on update cascade,
     foreign key (pair_id) references pairs(id)
         on delete cascade
         on update cascade
