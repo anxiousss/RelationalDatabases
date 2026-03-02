@@ -11,13 +11,15 @@ create table if not exists dicts (
     description text,
     foreign key (user_id) references users(id)
         on delete cascade
-        on update cascade
+        on update cascade,
+    CONSTRAINT unique_user_dict UNIQUE (user_id, title) 
 );
 
 create table if not exists words (
     id SERIAL primary key,
     key text,
-    value text
+    value text,
+    constraint unique_key unique (key, value)
 );
 
 create table if not exists pairs (
@@ -34,7 +36,7 @@ create table if not exists pairs (
 );
 
 create table if not exists progress (
-    pair_id INTEGER not null,
+    pair_id INTEGER not null PRIMARY KEY,
     knowledge_level INTEGER,          
     repetitions INTEGER,
     correct_in_a_row INTEGER,

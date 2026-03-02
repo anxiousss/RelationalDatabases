@@ -1,48 +1,48 @@
 @startuml
-title Модель данных для приложения-словаря с прогрессом изучения
+title Data model for dictionary app with learning progress
 
-entity Пользователь {
+entity User {
   *id: int <<PK>>
   --
-  имя: text
+  name: text
   email: text
 }
 
-entity Словари {
+entity Dictionary {
   *id: int <<PK>>
   --
-  название: text
-  описание: text
-  пользователь_id: int <<FK>>
+  title: text
+  description: text
+  user_id: int <<FK>>
 }
 
-entity Слова {
+entity Word {
   *id: int <<PK>>
   --
-  ключ: text
-  значение: text
+  key: text
+  value: text
 }
 
-entity Прогресс {
-  *пара_id: int <<FK>>
+entity Progress {
+  *pair_id: int <<FK, PK>>
   --
-  уровень_знания: int      "0..5 (0 – не изучено, 5 – идеально)"
-  повторений: int
-  правильных_подряд: int
-  последнее_повторение: timestamp
-  следующее_повторение: timestamp
+  knowledge_level: int
+  repetitions: int
+  correct_in_a_row: int
+  last_repetition: timestamp
+  next_repetition: timestamp
 }
 
-entity Пара {
-  *id: int <<FK>>
-  *словарь_id: int <<FK>>
-  *слово_id: int <<FK>>
+entity Pair {
+  *id: int <<PK>>
+  *dictionary_id: int <<FK>>
+  *word_id: int <<FK>>
   --
 }
 
-' Связи
-Пользователь ||--o{ Словари : создаёт
-Пара ||-|| Прогресс : отслеживается
-Слова ||-|| Пара : создают
-Словари ||-o{ Пара: создают
+' Relationships
+User ||--o{ Dictionary : creates
+Pair ||-|| Progress : tracks
+Word ||--o{ Pair : appears in
+Dictionary ||-o{ Pair : contains
 @enduml
