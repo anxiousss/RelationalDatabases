@@ -47,12 +47,12 @@ $$ LANGUAGE plpgsql;
 
 
 
-CREATE OR REPLACE FUNCTION add_word_to_dict(
+CREATE OR REPLACE procedure add_word_to_dict_p(
     p_dict_id INTEGER,
     p_key TEXT,
     p_value TEXT,
     p_topic TEXT
-) RETURNS VOID AS $$
+) AS $$
 DECLARE
     v_word_id INTEGER;
     v_exists BOOLEAN;
@@ -90,7 +90,6 @@ BEGIN
         RETURNING id INTO v_word_id;
     END IF;
 
-    -- Связываем слово со словарём
     INSERT INTO pairs (dict_id, word_id)
     VALUES (p_dict_id, v_word_id);
 
@@ -136,7 +135,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 
-SELECT add_word_to_dict(1, 'fox', 'лиса', 'animals');
+call add_word_to_dict_p(1, 'milk', 'молоко', 'food');
 
 SELECT update_progress(1, TRUE);
 
