@@ -1,5 +1,4 @@
 SET enable_seqscan = off;
--- затем выполнить запрос
 
 EXPLAIN ANALYZE
 SELECT id, key, value, topic
