@@ -1,8 +1,28 @@
-ALTER TABLE words ADD COLUMN IF NOT EXISTS topic text;
-ALTER TABLE dicts ADD COLUMN IF NOT EXISTS topic text;
+BEGIN;
 
-TRUNCATE users, dicts, words, pairs, progress RESTART IDENTITY CASCADE;
+DROP TABLE IF EXISTS words_with_idx CASCADE;
+DROP TABLE IF EXISTS words_no_idx CASCADE;
 
+
+CREATE TABLE words_with_idx (
+    id SERIAL,
+    key text NOT NULL,
+    value text NOT NULL,
+    topic text
+);
+ALTER TABLE words_with_idx ADD CONSTRAINT pk_words_with_idx PRIMARY KEY (id);
+ALTER TABLE words_with_idx ADD CONSTRAINT unique_key_temp UNIQUE (key, value);
+CREATE INDEX idx_words_topic_id_temp ON words_with_idx (topic, id) INCLUDE (key, value);
+CREATE INDEX idx_words_key_trgm_temp ON words_with_idx USING gin (key gin_trgm_ops);
+CREATE INDEX idx_words_lower_key_temp ON words_with_idx (lower(key));
+
+
+CREATE TABLE words_no_idx (
+    id SERIAL,
+    key text,
+    value text,
+    topic text
+);
 
 WITH base_words AS (
     SELECT * FROM (
@@ -60,65 +80,42 @@ WITH base_words AS (
         ('watch','смотреть','actions')
     ) AS t(key, value, topic)
 )
-INSERT INTO words (key, value, topic)
-SELECT
-    base.key || '_' || i,
-    base.value || '_' || i,
-    base.topic
+INSERT INTO words_with_idx (key, value, topic)
+SELECT base.key || '_' || i, base.value || '_' || i, base.topic
 FROM generate_series(1, 20000) AS i
 CROSS JOIN base_words base;
 
-
-INSERT INTO users (name, email)
-SELECT 'User_' || i, 'user_' || i || '@example.com'
-FROM generate_series(1, 500) AS i;
+INSERT INTO words_no_idx (key, value, topic)
+SELECT key, value, topic FROM words_with_idx;
 
 
-INSERT INTO dicts (user_id, title, description, topic)
-SELECT
-    u.id,
-    'Dict_' || u.id || '_' || gs,
-    'My dictionary',
-    (ARRAY['animals','food','colors','family','actions'])[floor(random() * 5 + 1)]
-FROM users u
-CROSS JOIN LATERAL generate_series(1, floor(random() * 4 + 2)::int) AS gs;
+EXPLAIN (ANALYZE, BUFFERS) UPDATE words_with_idx SET value = 'updated_idx' WHERE key = 'dog_1';
+EXPLAIN (ANALYZE, BUFFERS) UPDATE words_with_idx SET value = 'batch_idx' WHERE topic = 'animals';
+EXPLAIN (ANALYZE, BUFFERS) UPDATE words_with_idx SET value = 'all_' || id;
+EXPLAIN (ANALYZE, BUFFERS) 
+INSERT INTO words_with_idx (key, value, topic)
+SELECT 'new_ins_' || i, 'new_val_' || i, 'animals'
+FROM generate_series(1, 10000) i
+ON CONFLICT (key, value) DO NOTHING;
+DELETE FROM words_with_idx WHERE key = 'unique_conflict_key';
+EXPLAIN (ANALYZE, BUFFERS) 
+INSERT INTO words_with_idx (key, value, topic)
+VALUES ('unique_conflict_key', 'unique_val', 'animals')
+ON CONFLICT (key, value) DO UPDATE SET value = EXCLUDED.value;
 
 
-DO $$
-DECLARE
-    max_dict_id INTEGER;
-BEGIN
-    SELECT max(id) INTO max_dict_id FROM dicts;
-    IF max_dict_id IS NULL THEN
-        RAISE EXCEPTION 'No dicts found, cannot create pairs';
-    END IF;
-    INSERT INTO pairs (dict_id, word_id)
-    SELECT floor(random() * max_dict_id)::int + 1, id
-    FROM words;
-END $$;
+EXPLAIN (ANALYZE, BUFFERS) UPDATE words_no_idx SET value = 'updated_no_idx' WHERE key = 'dog_1';
+EXPLAIN (ANALYZE, BUFFERS) UPDATE words_no_idx SET value = 'batch_no_idx' WHERE topic = 'animals';
+EXPLAIN (ANALYZE, BUFFERS) UPDATE words_no_idx SET value = 'all_' || id;
+EXPLAIN (ANALYZE, BUFFERS) 
+INSERT INTO words_no_idx (key, value, topic)
+SELECT 'new_no_' || i, 'new_val_no_' || i, 'animals'
+FROM generate_series(1, 10000) i;
+EXPLAIN (ANALYZE, BUFFERS) 
+INSERT INTO words_no_idx (key, value, topic)
+VALUES ('simple_insert_test', 'simple_val', 'animals');
 
 
-DO $$
-DECLARE
-    max_dict_id INTEGER;
-    max_word_id INTEGER;
-BEGIN
-    SELECT max(id) INTO max_dict_id FROM dicts;
-    SELECT max(id) INTO max_word_id FROM words;
-    
-    INSERT INTO pairs (dict_id, word_id)
-    SELECT floor(random() * max_dict_id)::int + 1,
-           floor(random() * max_word_id)::int + 1
-    FROM generate_series(1, 200000) AS gs
-    ON CONFLICT (dict_id, word_id) DO NOTHING;
-END $$;
+EXPLAIN (ANALYZE, BUFFERS) UPDATE progress SET knowledge_level = 5 WHERE pair_id = 100000;
 
-INSERT INTO progress (pair_id, knowledge_level, repetitions, correct_in_a_row, last_repetition, next_repetition)
-SELECT
-    id,
-    floor(random() * 5 + 1)::int,
-    floor(random() * 10)::int,
-    floor(random() * 5)::int,
-    now() - (random() * interval '30 days'),
-    now() + (random() * interval '30 days')
-FROM pairs;
+ROLLBACK;
