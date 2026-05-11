@@ -1,46 +1,89 @@
+/*CREATE OR REPLACE PROCEDURE move_pair_safe(
+    p_pair_id INTEGER,
+    p_new_dict_id INTEGER
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_word_id INTEGER;
+    v_conflict BOOLEAN;
+BEGIN
+    RAISE NOTICE '=== Начало процедуры: перенос пары id=% в словарь id=% ===', p_pair_id, p_new_dict_id;
+
+    SELECT word_id INTO v_word_id FROM pairs WHERE id = p_pair_id;
+    IF NOT FOUND THEN
+        RAISE NOTICE 'Ошибка: пара с id=% не найдена', p_pair_id;
+        ROLLBACK;
+        RETURN;
+    END IF;
+    RAISE NOTICE 'word_id пары = %', v_word_id;
+
+    SELECT EXISTS(
+        SELECT 1 FROM pairs WHERE dict_id = p_new_dict_id AND word_id = v_word_id
+    ) INTO v_conflict;
+    
+    IF v_conflict THEN
+        RAISE NOTICE 'Конфликт: пара (dict_id=%, word_id=%) уже существует. Перенос отменён.', p_new_dict_id, v_word_id;
+        -- Можно просто завершить без изменений
+        RETURN;
+    END IF;
+
+    UPDATE pairs 
+    SET dict_id = p_new_dict_id 
+    WHERE id = p_pair_id;
+    RAISE NOTICE 'Поле dict_id пары % обновлено на %', p_pair_id, p_new_dict_id;
+
+    UPDATE progress 
+    SET next_repetition = NULL, knowledge_level = 0, repetitions = 0, correct_in_a_row = 0
+    WHERE pair_id = p_pair_id;
+    RAISE NOTICE 'Прогресс для пары % сброшен', p_pair_id;
+
+    COMMIT;
+    RAISE NOTICE '=== Транзакция успешно зафиксирована ===';
+END;
+$$;
+
+CALL move_pair_safe(2, 7);*/
+
+
+/*CREATE OR REPLACE PROCEDURE move_pair_wrong(p_pair_id INTEGER, p_new_dict_id INTEGER)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE NOTICE '=== Попытка перенести пару % в словарь % ===', p_pair_id, p_new_dict_id;
+    
+    UPDATE pairs SET dict_id = p_new_dict_id WHERE id = p_pair_id;
+    RAISE NOTICE 'Поле dict_id обновлено (возможно, несуществующий dict_id=%)', p_new_dict_id;
+   
+    UPDATE progress 
+    SET next_repetition = NULL, knowledge_level = 0, repetitions = 0, correct_in_a_row = 0
+    WHERE pair_id = p_pair_id;
+    
+    COMMIT;
+EXCEPTION
+    WHEN foreign_key_violation THEN
+        RAISE NOTICE 'Ошибка внешнего ключа! Транзакция будет откатана.';
+        ROLLBACK;
+        RAISE NOTICE 'Транзакция откачена. Изменения не применены.';
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Неожиданная ошибка: %', SQLERRM;
+        ROLLBACK;
+END;
+$$;
+
+CALL move_pair_wrong(150, 99);*/
+
+
 BEGIN;
-
--- Проверяем, что в целевом словаре ещё нет такой пары
-UPDATE pairs 
-SET dict_id = 7 
-WHERE id = 150 
-  AND NOT EXISTS (
-    SELECT 1 FROM pairs p2 
-    WHERE p2.dict_id = 7 AND p2.word_id = (SELECT word_id FROM pairs WHERE id = 150)
-  );
-
--- Если обновление затронуло строку, то обновляем прогресс
-UPDATE progress 
-SET next_repetition = NULL, knowledge_level = 0, repetitions = 0, correct_in_a_row = 0
-WHERE pair_id = 150 AND EXISTS (SELECT 1 FROM pairs WHERE id = 150 AND dict_id = 7);
-
-COMMIT;
-
-BEGIN;
-
-UPDATE pairs SET dict_id = 99 WHERE id = 150; -- ошибка foreign key
-UPDATE progress ...;
-
-ROLLBACK;
-
-
-
-BEGIN;
-
--- Переносим словарь
-UPDATE pairs SET dict_id = 7 WHERE id = 150
-  AND NOT EXISTS (SELECT 1 FROM pairs WHERE dict_id = 7 AND word_id = (SELECT word_id FROM pairs WHERE id = 150));
 
 SAVEPOINT sp_progress;
 
--- Ошибка: отрицательное значение repetitions
 UPDATE progress SET repetitions = -5 WHERE pair_id = 150;
 
 ROLLBACK TO SAVEPOINT sp_progress;
 
--- Правильное обновление прогресса
 UPDATE progress 
 SET next_repetition = NULL, knowledge_level = 0, repetitions = 0, correct_in_a_row = 0
 WHERE pair_id = 150;
 
-COMMIT;	
+COMMIT;

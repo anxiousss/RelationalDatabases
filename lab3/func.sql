@@ -134,9 +134,3 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
-call add_word_to_dict_p(1, 'milk', 'молоко', 'food');
-
-SELECT update_progress(1, TRUE);
-
-SELECT * FROM get_user_stats(1);
